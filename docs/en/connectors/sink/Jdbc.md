@@ -533,6 +533,94 @@ sink {
 }
 ```
 
+## FAQ
+
+### Does JDBC Sink support automatic table creation?
+
+Yes. Use `schema_save_mode` to control table creation behavior:
+
+- `CREATE_SCHEMA_WHEN_NOT_EXIST`: Creates the table only if it does not exist.
+- `RECREATE_SCHEMA`: Drops and recreates the table on every job start.
+- `ERROR_WHEN_SCHEMA_NOT_EXIST`: Throws an error if the table is missing.
+- `IGNORE`: Skips all table creation logic.
+
+Use `generate_sink_sql = true` together with `database` and `table` for automatic INSERT/UPSERT SQL generation.
+
+### How do I enable exactly-once semantics with JDBC Sink?
+
+JDBC Sink supports exactly-once via XA transactions. Enable it with:
+
+```hocon
+sink {
+  jdbc {
+    url = "jdbc:mysql://localhost:3306/mydb"
+    driver = "com.mysql.cj.jdbc.Driver"
+    user = "root"
+    password = "password"
+    is_exactly_once = true
+    xa_data_source_class_name = "com.mysql.cj.jdbc.MysqlXADataSource"
+    table = "target_table"
+    primary_keys = ["id"]
+  }
+}
+```
+
+Not all databases support XA transactions. Verify that your database and JDBC driver both support XA before enabling this option.
+
+### How do I configure upsert (INSERT or UPDATE) behavior?
+
+SeaTunnel only enters the upsert / update path after it has a final key set. That key can come from explicit `primary_keys`, or, when `primary_keys` is omitted, from upstream catalog metadata. If no primary key is available, SeaTunnel also tries to inherit the first unique key.
+
+When a final key set exists and `enable_upsert = true`, SeaTunnel prefers the database-native upsert statement provided by the target dialect. For example, PostgreSQL generates `INSERT ... ON CONFLICT (...) DO UPDATE` (or `DO NOTHING` when every column is part of the key and there is nothing left to update):
+
+```hocon
+sink {
+  jdbc {
+    url = "jdbc:mysql://localhost:3306/mydb"
+    driver = "com.mysql.cj.jdbc.Driver"
+    ...
+    primary_keys = ["id"]
+  }
+}
+```
+
+When a final key set exists but `enable_upsert = false`, SeaTunnel stops using native database upsert SQL and falls back to the row-kind-driven insert/update path:
+
+- `INSERT` rows are written as plain INSERTs
+- CDC `UPDATE_AFTER` rows are written as UPDATEs
+- CDC `DELETE` rows are written as DELETEs
+
+As a result, `enable_upsert = false` is not appropriate for ordinary batch imports that rely on duplicate-key overwrite behavior.
+
+### What happens if I do not configure `primary_keys`?
+
+If `primary_keys` is not configured, SeaTunnel first tries to inherit the primary key from upstream catalog metadata. If there is no primary key, it then tries the first unique key.
+
+JDBC Sink falls back to plain INSERT only when there is no explicit key and nothing usable can be inherited from upstream metadata. In that keyless mode, no database-native upsert SQL is generated, and the sink no longer uses row-kind-aware UPDATE / DELETE executors. For CDC inputs, the write path therefore effectively degrades to plain INSERT batching, and duplicate-key behavior depends entirely on the target table constraints.
+
+### When should I enable `use_copy_statement`?
+
+`use_copy_statement = true` makes JDBC Sink prefer the `COPY <table> (...) FROM STDIN WITH CSV` path instead of regular INSERT / UPSERT SQL. This happens before the normal primary-key-based write path, so COPY is still chosen even if `primary_keys` is configured.
+
+This option is mainly for high-volume PostgreSQL imports, and it has three important constraints:
+
+- the JDBC driver connection must expose `getCopyAPI()`, otherwise the job fails and tells you to switch `use_copy_statement` back to `false`
+- it is not a replacement for `ON CONFLICT`, so it does not provide duplicate-key overwrite semantics
+- `MAP`, `ARRAY`, and `ROW` types are not supported
+
+### How do I write to multiple tables in a single job?
+
+Use `table = "${table_name}"` and `database = "${schema_name}"` as placeholders. SeaTunnel resolves these from the upstream record's metadata when used with CDC sources or multi-table configurations. Pair with `generate_sink_sql = true` for fully automatic SQL generation.
+
+### Why is my JDBC driver not found?
+
+SeaTunnel does not bundle all JDBC drivers due to licensing restrictions. Place the JDBC driver JAR in `$SEATUNNEL_HOME/lib/` manually before starting the job. Common drivers:
+
+- MySQL: `mysql-connector-j-8.x.x.jar`
+- PostgreSQL: `postgresql-42.x.x.jar`
+- Oracle: `ojdbc8.jar`
+- SQL Server: `mssql-jdbc-12.x.x.jre11.jar`
+
 ## Changelog
 
 <ChangeLog />

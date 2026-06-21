@@ -11,6 +11,30 @@ SeaTunnel是一个多模态、超高性能、分布式的海量数据集成工�
 
 如果你是第一次接触 SeaTunnel，建议按下面路径进入文档：
 
+<div
+  style={{
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+    gap: "16px",
+    margin: "16px 0 24px",
+  }}>
+  <a
+    href="../getting-started/locally/run-your-first-job"
+    style={{
+      display: "block",
+      padding: "18px",
+      border: "1px solid var(--ifm-color-emphasis-300)",
+      borderRadius: "12px",
+      textDecoration: "none",
+      color: "inherit",
+      background: "var(--ifm-background-surface-color)",
+      boxShadow: "var(--ifm-global-shadow-lw)",
+    }}>
+    <strong>跑第一个任务</strong><br/>
+    <span>先用本地 FakeSource -&gt; FieldMapper -&gt; Console 链路把 SeaTunnel 跑通，再继续看真实源端到目标端的场景教程。</span>
+  </a>
+</div>
+
 - [快速入门总览](../getting-started/overview.md)，先建立整体路径
 - [SeaTunnel 引擎快速开始](../getting-started/locally/quick-start-seatunnel-engine.md)，先跑通第一个本地任务
 - [作业配置指南](../getting-started/job-configuration-guide.md)，开始编写真实作业
@@ -74,7 +98,7 @@ SeaTunnel 使用的默认引擎是 [SeaTunnel Zeta Engine](../engines/zeta/about
 
 ## 谁在使用 SeaTunnel
 
-SeaTunnel 拥有大量用户。 您可以在[用户](https://seatunnel.apache.org/user)中找到有关他们的更多信息.  
+SeaTunnel 拥有大量用户。 您可以在[用户](https://seatunnel.apache.org/zh-CN/user)中找到有关他们的更多信息.
 
 ## 展望
 
@@ -87,4 +111,4 @@ SeaTunnel 丰富了<a href="https://landscape.cncf.io/?item=app-definition-and-d
 
 ## 了解更多
 
-您可以参阅[快速入门](../getting-started/locally/deployment.md) 了解后续相关步骤。
+您可以参阅[跑第一个任务](../getting-started/locally/run-your-first-job.md) 了解后续相关步骤。

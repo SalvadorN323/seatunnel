@@ -64,6 +64,7 @@
         <module>connector-azurecosmosdb</module>
         <module>connector-tablestore</module>
         <module>connector-cassandra</module>
+        <module>connector-salesforce</module>
         <module>connector-s3-redshift</module>
         <module>connector-starrocks</module>
         <module>connector-google-sheets</module>
@@ -77,6 +78,7 @@
         <module>connector-tdengine</module>
         <module>connector-selectdb-cloud</module>
         <module>connector-hbase</module>
+        <module>connector-google-bigtable</module>
         <module>connector-rocketmq</module>
         <module>connector-amazonsqs</module>
         <module>connector-paimon</module>

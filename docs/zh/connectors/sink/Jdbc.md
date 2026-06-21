@@ -438,6 +438,94 @@ sink {
 }
 ```
 
+## 常见问题
+
+### JDBC Sink 支持自动建表吗？
+
+支持。通过 `schema_save_mode` 参数控制建表行为：
+
+- `CREATE_SCHEMA_WHEN_NOT_EXIST`：表不存在时创建，已存在则跳过。
+- `RECREATE_SCHEMA`：每次任务启动时删除并重建表。
+- `ERROR_WHEN_SCHEMA_NOT_EXIST`：表不存在时抛出异常。
+- `IGNORE`：跳过所有建表逻辑。
+
+配合 `generate_sink_sql = true` 以及 `database`、`table` 参数可自动生成 INSERT/UPSERT SQL。
+
+### 如何用 JDBC Sink 实现精确一次（exactly-once）？
+
+JDBC Sink 通过 XA 事务支持 exactly-once：
+
+```hocon
+sink {
+  jdbc {
+    url = "jdbc:mysql://localhost:3306/mydb"
+    driver = "com.mysql.cj.jdbc.Driver"
+    user = "root"
+    password = "password"
+    is_exactly_once = true
+    xa_data_source_class_name = "com.mysql.cj.jdbc.MysqlXADataSource"
+    table = "target_table"
+    primary_keys = ["id"]
+  }
+}
+```
+
+不是所有数据库都支持 XA 事务，启用前请确认数据库和 JDBC 驱动均支持。
+
+### 如何配置 Upsert（INSERT OR UPDATE）行为？
+
+SeaTunnel 只有在最终拿到了主键/唯一键信息时，才会进入 upsert / update 路径。这个 key 既可以来自显式配置的 `primary_keys`，也可以在未显式配置时从上游 catalog 元数据里继承主键；如果没有主键，还会尝试继承第一组 unique key。
+
+当最终存在 key 且 `enable_upsert = true` 时，SeaTunnel 会优先使用目标数据库方言支持的原生 upsert 语句。例如 PostgreSQL 会生成 `INSERT ... ON CONFLICT (...) DO UPDATE`（如果所有字段都是主键，没有可更新列，则退化为 `DO NOTHING`）：
+
+```hocon
+sink {
+  jdbc {
+    url = "jdbc:mysql://localhost:3306/mydb"
+    driver = "com.mysql.cj.jdbc.Driver"
+    ...
+    primary_keys = ["id"]
+  }
+}
+```
+
+当最终存在 key 但 `enable_upsert = false` 时，SeaTunnel 不再生成数据库原生 upsert 语句，而是回到按行类型执行的 insert/update 路径：
+
+- `INSERT` 行执行普通 INSERT
+- CDC `UPDATE_AFTER` 行执行 UPDATE
+- CDC `DELETE` 行执行 DELETE
+
+因此，`enable_upsert = false` 不适合依赖重复键自动覆盖的普通批量导入场景。
+
+### 未显式配置 `primary_keys` 时会发生什么？
+
+如果你没有显式配置 `primary_keys`，SeaTunnel 会先尝试从上游 catalog 元数据继承主键；如果没有主键，则再尝试继承第一组 unique key。
+
+只有在“显式配置也没有、上游元数据里也没有可继承 key”时，JDBC Sink 才会退回普通 INSERT。进入这个无 key 模式后，不仅不会生成数据库原生 upsert 语句，Sink 也不会再使用按 `RowKind` 执行 UPDATE / DELETE 的写入器。对于 CDC 输入，这条写链路会实质上退化为普通 INSERT batching，重复键是否报错完全取决于目标表自身约束。
+
+### 什么时候应该开启 `use_copy_statement`？
+
+`use_copy_statement = true` 会让 JDBC Sink 直接优先走 `COPY <table> (...) FROM STDIN WITH CSV` 路径，而不是常规的 INSERT / UPSERT 语句。即使同时配置了 `primary_keys`，也会优先进入 COPY 路径。
+
+这个选项更适合 PostgreSQL 大批量导入场景，但要同时满足下面几个前提：
+
+- JDBC 驱动连接对象必须提供 `getCopyAPI()` 能力；否则任务会直接报错，并提示把 `use_copy_statement` 改回 `false`
+- 它不是 `ON CONFLICT` 的替代品，不负责处理重复键覆盖逻辑
+- 当前不支持 `MAP`、`ARRAY`、`ROW` 类型
+
+### 如何在一个任务中写入多张表？
+
+使用 `table = "${table_name}"`、`database = "${schema_name}"` 占位符，SeaTunnel 会从上游记录的元数据中解析实际值（与 CDC 数据源或多表配置配合使用）。搭配 `generate_sink_sql = true` 可实现全自动 SQL 生成。
+
+### 为什么提示 JDBC 驱动未找到？
+
+SeaTunnel 出于许可证原因不内置所有 JDBC 驱动，需手动将驱动 JAR 放入 `$SEATUNNEL_HOME/lib/`。常用驱动：
+
+- MySQL：`mysql-connector-j-8.x.x.jar`
+- PostgreSQL：`postgresql-42.x.x.jar`
+- Oracle：`ojdbc8.jar`
+- SQL Server：`mssql-jdbc-12.x.x.jre11.jar`
+
 ## 变更日志
 
 <ChangeLog />
